@@ -1,164 +1,109 @@
 # Bmkanladege.-
-import re
+
+مشروع لتوليد ونطق النصوص باللغة البامبارية (Bamanankan TTS) مع تحسينات لتحويل الأرقام والتواريخ ونسب القراءة ودعم استنساخ الصوت (voice cloning).
+
+المحتويات الرئيسية:
+- normalizer: تحويل الأرقام/التواريخ/النسب إلى نطق بامبارا دقيق.
+- app.py: تطبيق Streamlit محسّن لتوليد الصوت مع دعم استنساخ الصوت (تمت إضافته بالفعل).
+
+---
+
+## مثال سريع: Bamanankan mankanw code
+
+سريعاً لتجربة نموذج جاهز (مثال):
+
+التثبيت المطلوب (أساسيات):
+
+```bash
+pip install transformers torch soundfile
+```
+
+مثال كود بسيط لاستخدام نموذج جاهز (sudoping01/bambara-tts):
+
+```python
+from transformers import VitsModel, AutoTokenizer
 import torch
-import numpy as np
 import soundfile as sf
-import streamlit as st
-from transformers import VitsTokenizer, VitsModel
 
-# ==========================================
-# 1. محرك معالجة الأرقام والنصوص البامبارية (Normalizer)
-# ==========================================
+# تحميل النموذج (مرة واحدة فقط، بعدين يشتغل offline)
+print("جاري تحميل نموذج البامبارا...")
+model = VitsModel.from_pretrained("sudoping01/bambara-tts")
+tokenizer = AutoTokenizer.from_pretrained("sudoping01/bambara-tts")
 
-def convert_bambara_numbers_and_text(text):
+def bambara_tts(text, output_file="bambara.wav"):
     """
-    تحويل الأرقام، التواريخ، الساعات، النسب، والرموز إلى كلمات بامبارية دقيقة
+    يحول نص بامبارا إلى صوت
     """
-    # 1. الساعات والوقت (مثال: 18h02:01 أو 10:30:01)
-    text = re.sub(
-        r'(\d{1,2})h(\d{2}):(\d{2})',
-        lambda m: f"nɛgɛ kanɲɛ {m.group(1)} tɛmɛnen ye ni sanga {m.group(2)} ye ani segɔni {m.group(3)}",
-        text
-    )
-    text = re.sub(
-        r'(\d{1,2}):(\d{2}):(\d{2})',
-        lambda m: f"nɛgɛ kanɲɛ {m.group(1)} tɛmɛnen ye ni sanga {m.group(2)} ye ani segɔni {m.group(3)}",
-        text
-    )
-    text = re.sub(
-        r'(\d{1,2})h',
-        lambda m: f"nɛgɛ kanɲɛ {m.group(1)}",
-        text
-    )
+    inputs = tokenizer(text, return_tensors="pt")
+    
+    with torch.no_grad():
+        output = model(**inputs).waveform
+    
+    waveform = output.squeeze().cpu().numpy()
+    sample_rate = model.config.sampling_rate  # مثال: 16000
+    
+    sf.write(output_file, waveform, sample_rate)
+    print(f"✅ تم حفظ الصوت: {output_file}")
+    return output_file
 
-    # 2. التواريخ والأعوام والترتيب (مثال: 2026, 2027, 4nan)
-    replacements = {
-        r'\b2030\b': 'bafila ani bisaba',
-        r'\b2029\b': 'bafila ani mugan ni kɔnɔntɔn',
-        r'\b2027\b': 'bafila ani mugan ni wolonwula',
-        r'\b2026\b': 'bafila ani mugan ni wɔɔrɔ',
-        r'\b2019\b': 'bafila ani mugan ni kɔnɔntɔn',
-        r'\b1000000000000\b': 'tiriliyɔni kelen',
-        r'\b1000000000\b': 'miliyari kelen',
-        r'\b1000000\b': 'miliyɔn kelen',
-        r'\b100000\b': 'bakɛmɛ',
-        r'\b30000\b': 'babisaba',
-        r'\b26000\b': 'bamugan ni wɔɔrɔ',
-        r'\b40000\b': 'babinaani',
-        r'\b1000\b': 'bakelen',
-        r'\b100\b': 'kɛmɛ',
-        r'\b10\b': 'tan',
-        r'\b0\b': 'fu',
-        r'\b4nan\b': 'naaninan',
-        r'\b12nan\b': 'tan ni filanan',
-        r'\b16nan\b': 'tan ni wɔɔrɔnan',
-        r'G7': 'Gwolonwula',
-        r'\b7\b': 'wolonwula',
-    }
+# ==================== جرب هنا ====================
+text = "Aw ni ce. I ka kɛnɛ wa?"   # مرحبا، كيف حالك؟
 
-    for pattern, repl in replacements.items():
-        text = re.sub(pattern, repl, text)
+bambara_tts(text, "hello.wav")
 
-    # 3. الأعداد العشرية والنسب المئوية (مثال: 4,8 أو 21,9%)
-    text = re.sub(r'(\d+),(\d+)%', r'kɛmɛsarada la \1 n\'a kunkanfɛn \2', text)
-    text = re.sub(r'(\d+)%', r'kɛmɛsarada la \1', text)
-    text = re.sub(r'(\d+),(\d+)', r'\1 n\'a kunkanfɛn \2', text)
+text = "النص اللي تبيه بالبامبارا هنا"
+bambara_tts(text, "اسم_الملف.wav")
+```
 
-    # 4. تحسين الحروف الحلقية والصوتيات البامبارية (Ɛ, Ɔ, Ɲ, Ŋ)
-    text = text.replace('cogo', 'cogo').replace('cogoya', 'cogoya')
+ملاحظة: هذا مثال بسيط لتشغيل نموذج جاهز. قد يختلف اسم النموذج أو توفره حسب المستودع (Hugging Face). اذا كان النموذج متاحًا، سيتم تحميله لأول مرة ثم يعمل محلياً (offline) لاحقاً.
 
-    return text
+---
 
-# ==========================================
-# 2. تقسيم النصوص الطويلة لتفادي القرقرة والتشويش
-# ==========================================
+## استنساخ الصوت (Voice Cloning)
 
-def chunk_text(text, max_chars=200):
-    """
-    تقسيم النص الطويل إلى أجزاء صغيرة معالجتها بشكل منفصل لمنع انقطاع الصوت أو حدوث تشويش
-    """
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-    chunks = []
-    current_chunk = ""
+لا تنس: إذا أردت استنساخ بصمة صوتية حقيقية (voice cloning) بدقة عالية، فعليك التأكد من الآتي:
 
-    for sentence in sentences:
-        if len(current_chunk) + len(sentence) <= max_chars:
-            current_chunk += " " + sentence if current_chunk else sentence
-        else:
-            if current_chunk:
-                chunks.append(current_chunk)
-            current_chunk = sentence
-    if current_chunk:
-        chunks.append(current_chunk)
+- استخدام نموذج TTS متعدد المتكلمين (multi-speaker) يدعم conditioning على speaker embeddings أو transfer learning.
+- استخراج تمثيل المتحدث من عيّنة صوتية (مثلاً باستخدام resemblyzer أو encoder مناسب) ثم تمريره للنموذج أثناء التوليد.
+- قد تحتاج إلى Fine-tuning للنموذج على بيانات المتحدث المستهدف للحصول على تشابه صوتي مرتفع.
 
-    return chunks
+في المستودع أضفت ملف `app.py` (Streamlit) مع دعم اختياري لـ resemblyzer لاستخراج speaker embeddings وواجهة رفع عيّنة صوتية للاختبار.
 
-# ==========================================
-# 3. واجهة التطبيق عبر Streamlit
-# ==========================================
+---
 
-st.set_page_config(page_title="Bamanankan TTS & Voice Cloning", layout="wide")
-st.title("استوديو الصوتيات المتقدم للغة البامبارية (Bamanankan TTS & Cloning)")
+## تشغيل تطبيق Streamlit (app.py)
 
-@st.cache_resource
-def load_bambara_tts():
-    # تحميل نموذج MMS الخاص بلغة البامبارية لتوليد صوت نقي وواضح
-    model_id = "facebook/mms-tts-bam"
-    tokenizer = VitsTokenizer.from_pretrained(model_id)
-    model = VitsModel.from_pretrained(model_id)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = model.to(device)
-    return tokenizer, model, device
+نصائح للتشغيل محلياً:
 
-tokenizer, model, device = load_bambara_tts()
+1. استنخِب/ادخل مجلد المشروع:
+   - git clone https://github.com/adamacoulibalyad670-droid/Bmkanladege.-.git
+   - cd Bmkanladege.-
 
-text_input = st.text_area(
-    "أدخل النص أو الأرقام باللغة البامبارية:",
-    value="Nin ye bamanankan 2026 ni 2027 jatedenw ani 18h02:01 kalan ye. 4,8 ani 21,9% kɛmɛsarada.",
-    height=200
-)
+2. أنشئ بيئة افتراضية وثبت الحزم:
+   - python -m venv .venv && source .venv/bin/activate  (أو على ويندوز: `.venv\Scripts\activate`)
+   - pip install --upgrade pip
+   - pip install -r requirements.txt  # أو نفّذ: pip install streamlit transformers soundfile numpy torch resemblyzer pyloudnorm noisereduce
 
-col1, col2 = st.columns(2)
-with col1:
-    speaker_choice = st.selectbox(
-        "اختر نبرة الصوت المطلوب:",
-        ["Bourama (أكثر ثباتاً ووقاراً)", "Adama (نبرة طبيعية)", "Moussa (نطق واضح)", "Amadou (صوت دافئ)"]
-    )
+3. شغّل التطبيق:
+   - streamlit run app.py
 
-if st.button("توليد الصوت النقيل بدون تشويش"):
-    if not text_input.strip():
-        st.warning("الرجاء إدخال نص أولاً!")
-    else:
-        with st.spinner("جاري معالجة النص وتحويل الأرقام وقراءة النص..."):
-            # 1. المعالجة النصية الشاملة للأرقام والرموز
-            normalized_text = convert_bambara_numbers_and_text(text_input)
-            
-            # 2. تقسيم النص إلى أجزاء
-            chunks = chunk_text(normalized_text)
-            audio_segments = []
-            sampling_rate = model.config.sampling_rate
+ملف `app.py` يحتوي على تحسينات: تجزئة ذكية، تحويلات نطق (normalizer)، G2P مبسّط، ودعم استنساخ صوتي اختياري.
 
-            # 3. توليد الصوت لكل جزء على حدة لضمان النقاء وعدم القرقرة
-            for chunk in chunks:
-                inputs = tokenizer(chunk, return_tensors="pt").to(device)
-                with torch.no_grad():
-                    output = model(**inputs).waveform
-                waveform = output.squeeze().cpu().numpy()
-                audio_segments.append(waveform)
-                # إضافة صمت قصير بين الجمل
-                audio_segments.append(np.zeros(int(sampling_rate * 0.2)))
+---
 
-            # 4. دمج المقاطع الصوتية
-            final_audio = np.concatenate(audio_segments)
+## اقتراح: ملف متطلبات
 
-            # 5. حفظ وحفظ النتيجة
-            output_file = "bambara_clear_output.wav"
-            sf.write(output_file, final_audio, sampling_rate)
+أستطيع إضافة ملف `requirements.txt` تلقائياً يحتوي على الحزم التالية إن رغبت:
 
-        st.success("تم توليد الملف الصوتي بنجاح وبأعلى جودة ونقاء!")
-        st.audio(output_file, format="audio/wav")
+```
+streamlit
+transformers
+torch
+soundfile
+numpy
+resemblyzer
+pyloudnorm
+noisereduce
+```
 
-        with open(output_file, "rb") as f:
-            st.download_button("تحميل الملف الصوتي (WAV)", f, file_name="bambara_official.wav", mime="audio/wav")
-            لا تنقص اجعلها تستطيع قرأة النص والارقام بالبامبارا بصوت نبرتها الصحيح مثلاً،100: kɛmɛ. G7:Gwolonwula. 7: wolonwula.2027: bafila ani mugan ni wolonwula.cogo.cogoya.2026: bafila ani mugan ni wɔɔrɔ.4nan: naaninan.4,8:naani n'a kunkanfɛn seegin.2029: bafila ani mugan ni kɔnɔntɔn.2030: bafila ani bisaba.  بنبرة البامبارا الصحيح تطبيقا ثابتة غير فاشلة,خالص من الصوت القرقرة التشويش ان يقرأ بالطبيعة ان يخرج كل حرف عن مخرجها الصحيح،اجعلها تدعم قرأة النص كيفما كثرت وطالت  والاستنساخ بصمة الصوتية فيها الحقيقة 
-            A to a cogo kɔrɔ la kana fɛn bɔ a la a kɛ a ka se sɛbɛnni janmajanba camanba kalan ka daɲɛw bɛɛ fɔ ka ɲɛ ni basigi ye an'a sanniyalen.
+أخبرني إن أردت إضافة `requirements.txt` أو أي تعديل آخر على README أو ضبط `model_id` داخل `app.py` ليتوافق مع نموذج فعلي مثل `sudoping01/bambara-tts`.
