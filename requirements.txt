@@ -1,0 +1,8 @@
+streamlit
+transformers
+torch
+soundfile
+numpy
+resemblyzer
+pyloudnorm
+noisereduce
